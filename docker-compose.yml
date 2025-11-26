@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.0
+    container_name: fakfa-etcd
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    environment:
+      - ETCD_NAME=etcd0
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd:2380
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+      - ETCD_INITIAL_CLUSTER=etcd0=http://etcd:2380
+      - ETCD_INITIAL_CLUSTER_STATE=new
+      - ETCD_INITIAL_CLUSTER_TOKEN=etcd-cluster-1
+    volumes:
+      - etcd-data:/etcd-data
+    networks:
+      - fakfa-network
+
+  controller:
+    build: .
+    container_name: fakfa-controller
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - ETCD_ENDPOINTS=etcd:2379
+    depends_on:
+      - etcd
+    command: ["npm", "run", "controller"]
+    networks:
+      - fakfa-network
+
+  broker1:
+    build: .
+    container_name: fakfa-broker1
+    ports:
+      - "9092:9092"
+    environment:
+      - NODE_ENV=production
+      - ETCD_ENDPOINTS=etcd:2379
+      - BROKER_HOST=broker1
+      - BROKER_PORT=9092
+    depends_on:
+      - etcd
+      - controller
+    command: ["npm", "run", "broker", "9092", "broker1"]
+    volumes:
+      - broker1-data:/app/data
+    networks:
+      - fakfa-network
+
+  broker2:
+    build: .
+    container_name: fakfa-broker2
+    ports:
+      - "9093:9093"
+    environment:
+      - NODE_ENV=production
+      - ETCD_ENDPOINTS=etcd:2379
+      - BROKER_HOST=broker2
+      - BROKER_PORT=9093
+    depends_on:
+      - etcd
+      - controller
+    command: ["npm", "run", "broker", "9093", "broker2"]
+    volumes:
+      - broker2-data:/app/data
+    networks:
+      - fakfa-network
+
+  broker3:
+    build: .
+    container_name: fakfa-broker3
+    ports:
+      - "9094:9094"
+    environment:
+      - NODE_ENV=production
+      - ETCD_ENDPOINTS=etcd:2379
+      - BROKER_HOST=broker3
+      - BROKER_PORT=9094
+    depends_on:
+      - etcd
+      - controller
+    command: ["npm", "run", "broker", "9094", "broker3"]
+    volumes:
+      - broker3-data:/app/data
+    networks:
+      - fakfa-network
+
+volumes:
+  etcd-data:
+  broker1-data:
+  broker2-data:
+  broker3-data:
+
+networks:
+  fakfa-network:
+    driver: bridge

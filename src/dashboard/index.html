@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fakfa - Streaming Platform Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
+        .header { background: #2c3e50; color: white; padding: 1rem 2rem; }
+        .header h1 { font-size: 1.5rem; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 2rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; }
+        .card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h2 { color: #2c3e50; margin-bottom: 1rem; font-size: 1.2rem; }
+        .status { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
+        .status.healthy { background: #d4edda; color: #155724; }
+        .status.unhealthy { background: #f8d7da; color: #721c24; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .table th, .table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6; }
+        .table th { background: #f8f9fa; font-weight: 600; }
+        .btn { background: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; }
+        .btn:hover { background: #0056b3; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        .form-group input, .form-group select { width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; }
+        .loading { text-align: center; color: #666; padding: 2rem; }
+        .error { color: #dc3545; background: #f8d7da; padding: 1rem; border-radius: 4px; margin: 1rem 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 Fakfa Streaming Platform</h1>
+    </div>
+
+    <div class="container">
+        <div class="grid">
+            <!-- Cluster Status -->
+            <div class="card">
+                <h2>Cluster Status</h2>
+                <div id="cluster-status" class="loading">Loading...</div>
+            </div>
+
+            <!-- Brokers -->
+            <div class="card">
+                <h2>Brokers</h2>
+                <div id="brokers-list" class="loading">Loading...</div>
+            </div>
+
+            <!-- Topics -->
+            <div class="card">
+                <h2>Topics</h2>
+                <div id="topics-list" class="loading">Loading...</div>
+                
+                <h3 style="margin-top: 2rem; margin-bottom: 1rem;">Create Topic</h3>
+                <form id="create-topic-form">
+                    <div class="form-group">
+                        <label>Topic Name</label>
+                        <input type="text" id="topic-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Partitions</label>
+                        <input type="number" id="topic-partitions" value="1" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Replication Factor</label>
+                        <input type="number" id="topic-replication" value="1" min="1">
+                    </div>
+                    <button type="submit" class="btn">Create Topic</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+
+        async function fetchData(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error(`Error fetching ${endpoint}:`, error);
+                return null;
+            }
+        }
+
+        async function loadClusterStatus() {
+            const metadata = await fetchData('/metadata');
+            const statusEl = document.getElementById('cluster-status');
+            
+            if (!metadata) {
+                statusEl.innerHTML = '<div class="error">Failed to load cluster status</div>';
+                return;
+            }
+
+            const brokerCount = metadata.brokers.length;
+            const topicCount = Object.keys(metadata.topics).length;
+            const healthyBrokers = metadata.brokers.filter(b => Date.now() - b.lastHeartbeat < 30000).length;
+
+            statusEl.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; text-align: center;">
+                    <div>
+                        <div style="font-size: 2rem; font-weight: bold; color: #007bff;">${brokerCount}</div>
+                        <div style="color: #666;">Brokers</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 2rem; font-weight: bold; color: #28a745;">${topicCount}</div>
+                        <div style="color: #666;">Topics</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 2rem; font-weight: bold; color: ${healthyBrokers === brokerCount ? '#28a745' : '#dc3545'};">${healthyBrokers}/${brokerCount}</div>
+                        <div style="color: #666;">Healthy</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadBrokers() {
+            const data = await fetchData('/brokers');
+            const brokersEl = document.getElementById('brokers-list');
+            
+            if (!data) {
+                brokersEl.innerHTML = '<div class="error">Failed to load brokers</div>';
+                return;
+            }
+
+            if (data.brokers.length === 0) {
+                brokersEl.innerHTML = '<p>No brokers registered</p>';
+                return;
+            }
+
+            const table = `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Address</th>
+                            <th>Status</th>
+                            <th>Last Heartbeat</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.brokers.map(broker => {
+                            const isHealthy = Date.now() - broker.lastHeartbeat < 30000;
+                            const lastSeen = new Date(broker.lastHeartbeat).toLocaleTimeString();
+                            return `
+                                <tr>
+                                    <td>${broker.id.substring(0, 8)}...</td>
+                                    <td>${broker.host}:${broker.port}</td>
+                                    <td><span class="status ${isHealthy ? 'healthy' : 'unhealthy'}">${isHealthy ? 'Healthy' : 'Unhealthy'}</span></td>
+                                    <td>${lastSeen}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+            brokersEl.innerHTML = table;
+        }
+
+        async function loadTopics() {
+            const data = await fetchData('/topics');
+            const topicsEl = document.getElementById('topics-list');
+            
+            if (!data) {
+                topicsEl.innerHTML = '<div class="error">Failed to load topics</div>';
+                return;
+            }
+
+            if (data.topics.length === 0) {
+                topicsEl.innerHTML = '<p>No topics created</p>';
+                return;
+            }
+
+            const table = `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Partitions</th>
+                            <th>Replication Factor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.topics.map(topic => `
+                            <tr>
+                                <td>${topic.name}</td>
+                                <td>${topic.partitions}</td>
+                                <td>${topic.replicationFactor}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            topicsEl.innerHTML = table;
+        }
+
+        document.getElementById('create-topic-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const name = document.getElementById('topic-name').value;
+            const partitions = parseInt(document.getElementById('topic-partitions').value);
+            const replicationFactor = parseInt(document.getElementById('topic-replication').value);
+
+            try {
+                const response = await fetch('/topics', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, partitions, replicationFactor })
+                });
+
+                if (response.ok) {
+                    alert('Topic created successfully!');
+                    document.getElementById('create-topic-form').reset();
+                    loadTopics();
+                    loadClusterStatus();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        });
+
+        // Load data on page load
+        loadClusterStatus();
+        loadBrokers();
+        loadTopics();
+
+        // Refresh data every 10 seconds
+        setInterval(() => {
+            loadClusterStatus();
+            loadBrokers();
+            loadTopics();
+        }, 10000);
+    </script>
+</body>
+</html>
