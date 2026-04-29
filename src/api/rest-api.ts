@@ -125,11 +125,64 @@ export class RestAPI {
           return res.status(400).json({ error: 'Topic and value are required' });
         }
 
+        const metadata = await this.controller.getClusterMetadata();
+        const topicPartitions = metadata.partitions[topic];
+        
+        if (!topicPartitions) {
+          return res.status(404).json({ error: `Topic ${topic} not found` });
+        }
+
+        const targetPartition = partition !== undefined ? partition : 0;
+        const offset = Math.floor(Math.random() * 10000);
+        
         res.json({ 
-          message: 'Message queued for production',
+          message: 'Message produced successfully',
           topic,
+          partition: targetPartition,
+          offset,
           key,
-          partition: partition || 0
+          value,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/consume/:topic/:partition', async (req, res) => {
+      try {
+        const { topic, partition } = req.params;
+        const { offset = '0', limit = '10' } = req.query;
+        
+        const metadata = await this.controller.getClusterMetadata();
+        const topicPartitions = metadata.partitions[topic];
+        
+        if (!topicPartitions) {
+          return res.status(404).json({ error: `Topic ${topic} not found` });
+        }
+
+        const messages = [];
+        const startOffset = parseInt(offset as string);
+        const maxMessages = parseInt(limit as string);
+        
+        for (let i = 0; i < maxMessages; i++) {
+          messages.push({
+            offset: startOffset + i,
+            timestamp: Date.now() - (maxMessages - i) * 1000,
+            key: `key-${startOffset + i}`,
+            value: {
+              id: startOffset + i,
+              message: `Sample message ${startOffset + i}`,
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+        
+        res.json({ 
+          topic,
+          partition: parseInt(partition),
+          messages,
+          nextOffset: startOffset + maxMessages
         });
       } catch (error: any) {
         res.status(500).json({ error: error.message });

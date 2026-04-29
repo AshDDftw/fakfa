@@ -36,7 +36,7 @@ export class ClusterController {
     // Renew lease periodically
     setInterval(async () => {
       try {
-        await lease.keepAliveOnce();
+        await lease.keepaliveOnce();
       } catch (error) {
         this.logger.error('Failed to renew controller lease:', error);
       }
@@ -157,7 +157,7 @@ export class ClusterController {
   private async handleBrokerFailure(brokerId: string) {
     this.logger.warn(`Detected broker failure: ${brokerId}`);
     this.brokers.delete(brokerId);
-    await this.etcd.delete(`/brokers/${brokerId}`);
+    await this.etcd.delete()
 
     // Reassign partitions that were led by the failed broker
     for (const [topicName, partitions] of this.partitions) {
